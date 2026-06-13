@@ -298,9 +298,26 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     fetchStats(true);
-    const intervalStats = setInterval(() => fetchStats(false), 5000);
-    const intervalNow = setInterval(() => setNow(Date.now()), 1000);
-    return () => { clearInterval(intervalStats); clearInterval(intervalNow); };
+
+    // Realtime: push updates when rows change instead of constant polling
+    const channel = supabase
+      .channel(`garden:${session.key}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "garden_stats", filter: `owner=eq.${session.key}` },
+        () => fetchStats(false)
+      )
+      .subscribe();
+
+    // Fallback poll every 30s (Realtime covers most updates)
+    const intervalStats = setInterval(() => fetchStats(false), 30000);
+    const intervalNow   = setInterval(() => setNow(Date.now()), 1000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(intervalStats);
+      clearInterval(intervalNow);
+    };
   }, [session?.key]);
 
   const getRelativeTime = (isoString: string) => {
@@ -488,21 +505,33 @@ export default function App() {
                             <span className="text-xs text-zinc-700">—</span>
                           ) : (
                             <div className="flex flex-wrap gap-1">
-                              {account.plants.map((plant, idx) => {
-                                const mutated = plant.mutation && plant.mutation !== "None";
+                              {Object.values(
+                                account.plants.reduce((acc, p) => {
+                                  const k = `${p.seedName}|${p.mutation}`;
+                                  if (acc[k]) acc[k].count++;
+                                  else acc[k] = { seedName: p.seedName, mutation: p.mutation, count: 1 };
+                                  return acc;
+                                }, {} as Record<string, { seedName: string; mutation: string; count: number }>)
+                              ).map((g, idx) => {
+                                const mutated = g.mutation && g.mutation !== "None";
                                 return (
                                   <span
-                                    key={`${plant.id}-${idx}`}
+                                    key={idx}
                                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border ${
                                       mutated
                                         ? "bg-violet-950/40 border-violet-900 text-violet-300"
                                         : "bg-zinc-900 border-zinc-800 text-zinc-400"
                                     }`}
                                   >
-                                    <span className="truncate max-w-[80px]" title={plant.seedName}>{plant.seedName}</span>
+                                    <span className="truncate max-w-[80px]" title={g.seedName}>{g.seedName}</span>
                                     {mutated && (
                                       <span className="shrink-0 text-violet-500/60">
-                                        {" · "}<span className="text-violet-400" title={plant.mutation}>{plant.mutation}</span>
+                                        {" · "}<span className="text-violet-400" title={g.mutation}>{g.mutation}</span>
+                                      </span>
+                                    )}
+                                    {g.count > 1 && (
+                                      <span className={`shrink-0 font-semibold ${mutated ? "text-violet-500" : "text-zinc-600"}`}>
+                                        x{g.count}
                                       </span>
                                     )}
                                   </span>
