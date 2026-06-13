@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { Coins, Leaf, RefreshCw, Search, Sparkles, Users, WifiOff, LogOut, FileCode, Copy, Check, X } from "lucide-react";
 import { AccountStats } from "./types";
 
 const SUPABASE_URL = "https://bmcwuoeaxmhxjihgxzoa.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtY3d1b2VheG1oeGppaGd4em9hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjk4MDAsImV4cCI6MjA5Njk0NTgwMH0.bjxUSLFVnCJdTzvzx4QW8rnR-5vXbMQ9eBKp_vOQli8";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 function buildScript(ownerKey: string) {
   return `-- Grow a Garden 2 Tracker
@@ -115,14 +118,13 @@ function ScriptModal({ ownerKey, onClose }: { ownerKey: string; onClose: () => v
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
       <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col" style={{ maxHeight: "85vh" }}>
-        {/* Modal header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-900">
           <div>
             <div className="flex items-center gap-2">
               <FileCode className="w-4 h-4 text-emerald-400" />
               <span className="text-sm font-semibold text-white">tracker.lua</span>
             </div>
-            <p className="text-[11px] text-zinc-600 mt-0.5">Execute this script in your Roblox exploit on each account</p>
+            <p className="text-[11px] text-zinc-600 mt-0.5">Execute in your Roblox exploit on each account</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -135,25 +137,20 @@ function ScriptModal({ ownerKey, onClose }: { ownerKey: string; onClose: () => v
             >
               {copied ? <><Check className="w-3 h-3" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy Script</>}
             </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-md text-zinc-600 hover:text-white hover:bg-zinc-900 transition-all"
-            >
+            <button onClick={onClose} className="p-1.5 rounded-md text-zinc-600 hover:text-white hover:bg-zinc-900 transition-all">
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Key callout */}
         <div className="px-5 py-3 bg-zinc-900/50 border-b border-zinc-900 flex items-center gap-3">
           <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium shrink-0">Your Key</div>
           <code className="text-xs text-emerald-400 font-mono bg-zinc-900 px-2 py-1 rounded border border-zinc-800 truncate">
             {ownerKey}
           </code>
-          <span className="text-[10px] text-zinc-700 shrink-0">pre-filled in OWNER below</span>
+          <span className="text-[10px] text-zinc-700 shrink-0">pre-filled as OWNER</span>
         </div>
 
-        {/* Script */}
         <div className="overflow-y-auto flex-1">
           <pre className="text-[11px] text-zinc-400 font-mono leading-relaxed p-5 whitespace-pre-wrap break-all">
             {script}
@@ -175,19 +172,29 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, key: string) => void
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        onLogin(result.name, result.key);
-      } else {
-        setError(result.error || "Something went wrong");
+      // Check if user already exists
+      const { data: existing } = await supabase
+        .from("users")
+        .select("key")
+        .eq("name", name)
+        .single();
+
+      if (existing) {
+        onLogin(name, existing.key);
+        return;
       }
-    } catch {
-      setError("Could not connect to server");
+
+      // Create new user with a random key
+      const key = crypto.randomUUID();
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert({ name, key });
+
+      if (insertError) throw new Error(insertError.message);
+
+      onLogin(name, key);
+    } catch (e: any) {
+      setError(e.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -226,7 +233,7 @@ function LoginScreen({ onLogin }: { onLogin: (name: string, key: string) => void
             disabled={!value.trim() || loading}
             className="w-full bg-white hover:bg-zinc-100 disabled:bg-zinc-900 disabled:text-zinc-700 text-black font-semibold text-sm rounded-lg py-2.5 transition-all duration-150 flex items-center justify-center gap-2"
           >
-            {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
             {loading ? "Signing in…" : "Continue"}
           </button>
         </div>
@@ -244,9 +251,9 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("gag2_session") || "null"); } catch { return null; }
   });
   const [stats, setStats] = useState<AccountStats[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [now, setNow] = useState<number>(Date.now());
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [now, setNow] = useState(Date.now());
   const [showScript, setShowScript] = useState(false);
 
   const handleLogin = (name: string, key: string) => {
@@ -265,9 +272,22 @@ export default function App() {
     if (!session) return;
     if (showLoading) setLoading(true);
     try {
-      const res = await fetch(`/api/stats?owner=${encodeURIComponent(session.key)}`);
-      const result = await res.json();
-      if (result.success) setStats(result.data);
+      const { data, error } = await supabase
+        .from("garden_stats")
+        .select("*")
+        .eq("owner", session.key)
+        .order("updated_at", { ascending: false });
+
+      if (!error && data) {
+        setStats(data.map((row: any) => ({
+          username: row.username,
+          userId: row.userid,
+          sheckles: row.sheckles,
+          plotName: row.plot_name,
+          plants: row.plants || [],
+          lastUpdated: row.updated_at,
+        })));
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -315,7 +335,6 @@ export default function App() {
 
       {showScript && <ScriptModal ownerKey={session.key} onClose={() => setShowScript(false)} />}
 
-      {/* Nav */}
       <header className="border-b border-zinc-900 bg-black/90 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 h-13 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -360,7 +379,6 @@ export default function App() {
 
       <main className="flex-grow max-w-6xl w-full mx-auto px-6 py-7 space-y-5">
 
-        {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: "Online",    value: onlineCount,                    icon: <Users className="w-3.5 h-3.5 text-emerald-500" />,  valueClass: "text-emerald-400" },
@@ -378,7 +396,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Accounts table */}
         <div className="rounded-xl border border-zinc-900 bg-zinc-950 overflow-hidden">
           <div className="px-5 py-3 border-b border-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
