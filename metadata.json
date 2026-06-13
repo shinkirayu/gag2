@@ -1,0 +1,6 @@
+{
+  "name": "Grow a Garden 2 Tracker",
+  "description": "Real-time tracker for Grow a Garden 2 Roblox accounts, Sheckles, plots, mutations, and seed names.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
