@@ -4,18 +4,18 @@ export interface PlantInfo {
   mutation: string;
 }
 
+export interface PetInfo {
+  id: string;
+  name: string;
+  rarity: string;
+}
+
 export interface AccountStats {
   username: string;
   userId: number;
   sheckles: number;
   plotName: string;
   plants: PlantInfo[];
+  pets: PetInfo[];
   lastUpdated: string;
-}
-
-export interface SupabaseConfig {
-  url: string;
-  key: string;
-  tableName: string;
-  enabled: boolean;
 }

@@ -27,7 +27,12 @@ if not httpRequest then
 end
 log("HTTP function: OK")
 
--- Scan data immediately — runs before any HTTP call
+local function ownerMatch(attr)
+    return attr == player.Name
+        or attr == tostring(player.UserId)
+        or attr == player.UserId
+end
+
 local function scan()
     local data = {
         username  = player.Name,
@@ -35,6 +40,7 @@ local function scan()
         sheckles  = 0,
         plot_name = "None",
         plants    = {},
+        pets      = {},
         owner     = OWNER,
     }
 
@@ -48,45 +54,57 @@ local function scan()
         log("WARNING: leaderstats not found")
     end
 
-    -- Plot
+    -- Plants
     local gardens = workspace:FindFirstChild("Gardens")
     if not gardens then
         log("ERROR: workspace.Gardens not found")
-        return data
-    end
-
-    local allPlots = gardens:GetChildren()
-    log("Scanning " .. #allPlots .. " plots for: " .. player.Name)
-
-    for _, plot in ipairs(allPlots) do
-        local owner = plot:GetAttribute("Owner")
-        if owner == player.Name
-            or owner == tostring(player.UserId)
-            or owner == player.UserId then
-            data.plot_name = plot.Name
-            log("Matched: " .. plot.Name)
-
-            local folder = plot:FindFirstChild("Plants")
-            if folder then
-                for _, p in ipairs(folder:GetChildren()) do
-                    local seedName = tostring(p:GetAttribute("SeedName") or p.Name)
-                    local mutation = tostring(p:GetAttribute("Mutation") or "None")
-                    log("  Plant: " .. seedName .. " | " .. mutation)
-                    table.insert(data.plants, {
-                        id       = p.Name,
-                        seedName = seedName,
-                        mutation = mutation,
-                    })
+    else
+        for _, plot in ipairs(gardens:GetChildren()) do
+            if ownerMatch(plot:GetAttribute("Owner")) then
+                data.plot_name = plot.Name
+                log("Plot matched: " .. plot.Name)
+                local folder = plot:FindFirstChild("Plants")
+                if folder then
+                    for _, p in ipairs(folder:GetChildren()) do
+                        local seedName = tostring(p:GetAttribute("SeedName") or p.Name)
+                        local mutation = tostring(p:GetAttribute("Mutation") or "None")
+                        log("  Plant: " .. seedName .. " | " .. mutation)
+                        table.insert(data.plants, {
+                            id       = p.Name,
+                            seedName = seedName,
+                            mutation = mutation,
+                        })
+                    end
                 end
-            else
-                log("No Plants folder in " .. plot.Name)
+                break
             end
-            break
+        end
+        if data.plot_name == "None" then
+            log("WARNING: No plot matched this player")
         end
     end
 
-    if data.plot_name == "None" then
-        log("WARNING: No plot matched this player")
+    -- Pets
+    local petClient = workspace:FindFirstChild("_PetVisualClient")
+    local petModels = petClient and petClient:FindFirstChild("Models")
+    if not petModels then
+        log("WARNING: workspace._PetVisualClient.Models not found")
+    else
+        local petCount = 0
+        for _, pet in ipairs(petModels:GetChildren()) do
+            if ownerMatch(pet:GetAttribute("Owner")) then
+                local name   = tostring(pet:GetAttribute("PetName") or pet.Name)
+                local rarity = tostring(pet:GetAttribute("Rarity") or "Common")
+                log("  Pet: " .. name .. " | " .. rarity)
+                table.insert(data.pets, {
+                    id     = pet.Name,
+                    name   = name,
+                    rarity = rarity,
+                })
+                petCount += 1
+            end
+        end
+        log("Pets found: " .. petCount)
     end
 
     return data

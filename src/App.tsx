@@ -34,6 +34,12 @@ if not httpRequest then
     return
 end
 
+local function ownerMatch(attr)
+    return attr == player.Name
+        or attr == tostring(player.UserId)
+        or attr == player.UserId
+end
+
 local function scan()
     local data = {
         username  = player.Name,
@@ -41,6 +47,7 @@ local function scan()
         sheckles  = 0,
         plot_name = "None",
         plants    = {},
+        pets      = {},
         owner     = OWNER,
     }
     local ls = player:FindFirstChild("leaderstats")
@@ -49,24 +56,35 @@ local function scan()
         data.sheckles = s and s.Value or 0
     end
     local gardens = workspace:FindFirstChild("Gardens")
-    if not gardens then return data end
-    for _, plot in ipairs(gardens:GetChildren()) do
-        local owner = plot:GetAttribute("Owner")
-        if owner == player.Name
-            or owner == tostring(player.UserId)
-            or owner == player.UserId then
-            data.plot_name = plot.Name
-            local folder = plot:FindFirstChild("Plants")
-            if folder then
-                for _, p in ipairs(folder:GetChildren()) do
-                    table.insert(data.plants, {
-                        id       = p.Name,
-                        seedName = tostring(p:GetAttribute("SeedName") or p.Name),
-                        mutation = tostring(p:GetAttribute("Mutation") or "None"),
-                    })
+    if gardens then
+        for _, plot in ipairs(gardens:GetChildren()) do
+            if ownerMatch(plot:GetAttribute("Owner")) then
+                data.plot_name = plot.Name
+                local folder = plot:FindFirstChild("Plants")
+                if folder then
+                    for _, p in ipairs(folder:GetChildren()) do
+                        table.insert(data.plants, {
+                            id       = p.Name,
+                            seedName = tostring(p:GetAttribute("SeedName") or p.Name),
+                            mutation = tostring(p:GetAttribute("Mutation") or "None"),
+                        })
+                    end
                 end
+                break
             end
-            break
+        end
+    end
+    local petClient = workspace:FindFirstChild("_PetVisualClient")
+    local petModels = petClient and petClient:FindFirstChild("Models")
+    if petModels then
+        for _, pet in ipairs(petModels:GetChildren()) do
+            if ownerMatch(pet:GetAttribute("Owner")) then
+                table.insert(data.pets, {
+                    id     = pet.Name,
+                    name   = tostring(pet:GetAttribute("PetName") or pet.Name),
+                    rarity = tostring(pet:GetAttribute("Rarity") or "Common"),
+                })
+            end
         end
     end
     return data
@@ -285,6 +303,7 @@ export default function App() {
           sheckles: row.sheckles,
           plotName: row.plot_name,
           plants: row.plants || [],
+          pets: row.pets || [],
           lastUpdated: row.updated_at,
         })));
       }
@@ -439,6 +458,7 @@ export default function App() {
                   <th className="py-2.5 px-4">Plot</th>
                   <th className="py-2.5 px-4">Sheckles</th>
                   <th className="py-2.5 px-4">Plants</th>
+                  <th className="py-2.5 px-4">Pets</th>
                   <th className="py-2.5 px-5 text-right">Last Sync</th>
                 </tr>
               </thead>
@@ -540,6 +560,37 @@ export default function App() {
                             </div>
                           )}
                         </td>
+                        {/* Pets */}
+                        <td className="py-3.5 px-4">
+                          {!account.pets || account.pets.length === 0 ? (
+                            <span className="text-xs text-zinc-700">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {Object.values(
+                                account.pets.reduce((acc, p) => {
+                                  const k = `${p.name}|${p.rarity}`;
+                                  if (acc[k]) acc[k].count++;
+                                  else acc[k] = { name: p.name, rarity: p.rarity, count: 1 };
+                                  return acc;
+                                }, {} as Record<string, { name: string; rarity: string; count: number }>)
+                              ).map((g, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border bg-amber-950/30 border-amber-900/50 text-amber-300"
+                                >
+                                  <span className="truncate max-w-[80px]" title={g.name}>{g.name}</span>
+                                  {g.rarity !== "Common" && (
+                                    <span className="text-amber-500/60"> · <span className="text-amber-400">{g.rarity}</span></span>
+                                  )}
+                                  {g.count > 1 && (
+                                    <span className="text-amber-500 font-semibold">x{g.count}</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+
                         <td className="py-3.5 px-5 text-right whitespace-nowrap">
                           <div className="text-xs text-zinc-500 font-mono">{getRelativeTime(account.lastUpdated)}</div>
                           <div className={`text-[9px] font-bold uppercase tracking-widest mt-0.5 ${online ? "text-emerald-500" : "text-red-600"}`}>
